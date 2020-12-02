@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -90,6 +92,48 @@ func read_lines(r *bufio.Reader) (sds []*SquidData) {
 	return
 }
 
+func parse_file(file *os.File, lastDateTime float64) (error, float64) {
+	reader := bufio.NewReader(file)
+
+	// Read initial lines
+	for _, v := range read_lines(reader) {
+		if v.DateTime > lastDateTime {
+			logInfo.Println(v)
+		}
+	}
+
+	// Suscribe to file changes
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err, lastDateTime
+	}
+	defer watcher.Close()
+
+	if err = watcher.Add(file.Name()); err != nil {
+		return err, lastDateTime
+	}
+
+	for {
+		select {
+		case event := <-watcher.Events:
+			switch event.Op {
+			case fsnotify.Write:
+				for _, v := range read_lines(reader) {
+					if v.DateTime > lastDateTime {
+						lastDateTime = v.DateTime
+						// Parsed line
+						logInfo.Println(v)
+					}
+				}
+			default:
+				return errors.New("unexpected watcher event"), lastDateTime
+			}
+		case err := <-watcher.Errors:
+			return err, lastDateTime
+		}
+	}
+}
+
 func main() {
 	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
 	flag.Parse()
@@ -98,45 +142,23 @@ func main() {
 	logInfo = log.New(os.Stdout, "INFO: ", 1)
 
 	logInfo.Println(fmt.Sprintf("squid file: %s", *squid_file))
-	file, err := os.Open(*squid_file)
-	if err != nil {
-		logErr.Fatal(err)
-	}
 
-	reader := bufio.NewReader(file)
+	alreadyOpenError := false
+	var lastDateTime float64 = 0
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		logErr.Fatal(err)
-	}
-	defer watcher.Close()
-
-	done := make(chan bool)
-
-	l := func() {
-		for {
-			select {
-			case event := <-watcher.Events:
-				switch event.Op {
-				case fsnotify.Write:
-					for _, v := range read_lines(reader) {
-						logInfo.Println(v)
-					}
-				default:
-					println("HERE")
-				}
-				// watch for errors
-			case err := <-watcher.Errors:
-				fmt.Println("ERROR", err)
+	for {
+		file, err := os.Open(*squid_file)
+		if err != nil {
+			if !alreadyOpenError {
+				logErr.Println(err)
+				alreadyOpenError = true
 			}
+		} else {
+			logInfo.Println(fmt.Sprintf("parsing file %s", file.Name()))
+			alreadyOpenError = false
+			err, lastDateTime = parse_file(file, lastDateTime)
+			logErr.Println(err)
 		}
+		time.Sleep(3 * time.Second)
 	}
-
-	// out of the box fsnotify can watch a single file, or a single directory
-	if err = watcher.Add(*squid_file); err != nil {
-		fmt.Println("ERROR", err)
-	}
-	go l()
-	<-done
-
 }
