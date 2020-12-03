@@ -136,12 +136,17 @@ func parse_file(file *os.File, lastDateTime float64) (error, float64) {
 
 func main() {
 	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
+	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
 	flag.Parse()
 
 	logErr = log.New(os.Stderr, "ERROR: ", 1)
 	logInfo = log.New(os.Stdout, "INFO: ", 1)
 
 	logInfo.Println(fmt.Sprintf("squid file: %s", *squid_file))
+
+	if *db_uri == "" {
+		logErr.Fatal("mongodb connection uri is missing")
+	}
 
 	alreadyOpenError := false
 	var lastDateTime float64 = 0
