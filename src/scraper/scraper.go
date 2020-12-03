@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/NODO-UH/quota-scraper/src/database"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -23,19 +24,7 @@ func init() {
 	logInfo = log.New(os.Stdout, "INFO [scraper]: ", 1)
 }
 
-type SquidData struct {
-	DateTime float64
-	User     string
-	Size     int64
-	Url      *url.URL
-	From     net.IP
-}
-
-func (sd SquidData) String() string {
-	return fmt.Sprintf("DT: %f, User: %s, Size: %d, Url: %s, From: %s", sd.DateTime, sd.User, sd.Size, sd.Url, sd.From)
-}
-
-func parse_SquidData(l string) *SquidData {
+func parseQuotaLog(l string) *database.Quotalog {
 	_words := strings.Split(l, " ")
 	var words []string
 	for _, w := range _words {
@@ -47,7 +36,7 @@ func parse_SquidData(l string) *SquidData {
 		logErr.Println("unexpected squid line")
 		return nil
 	}
-	sd := SquidData{}
+	sd := database.Quotalog{}
 	if date_time, err := strconv.ParseFloat(words[0], 64); err != nil {
 		logErr.Println(err)
 		return nil
@@ -76,7 +65,7 @@ func parse_SquidData(l string) *SquidData {
 	return &sd
 }
 
-func parse_line(r *bufio.Reader) (*SquidData, bool) {
+func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 	line_str, _, err := r.ReadLine()
 	if err != nil {
 		if err == io.EOF {
@@ -85,11 +74,11 @@ func parse_line(r *bufio.Reader) (*SquidData, bool) {
 		logErr.Println(err)
 		return nil, false
 	}
-	return parse_SquidData(string(line_str)), false
+	return parseQuotaLog(string(line_str)), false
 }
 
-func read_lines(r *bufio.Reader) (sds []*SquidData) {
-	for sd, eof := parse_line(r); !eof; sd, eof = parse_line(r) {
+func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
+	for sd, eof := parseLine(r); !eof; sd, eof = parseLine(r) {
 		sds = append(sds, sd)
 	}
 	return
@@ -99,7 +88,7 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 	reader := bufio.NewReader(file)
 
 	// Read initial lines
-	for _, v := range read_lines(reader) {
+	for _, v := range readLines(reader) {
 		if v.DateTime > lastDateTime {
 			logInfo.Println(v)
 		}
@@ -121,7 +110,7 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 		case event := <-watcher.Events:
 			switch event.Op {
 			case fsnotify.Write:
-				for _, v := range read_lines(reader) {
+				for _, v := range readLines(reader) {
 					if v.DateTime > lastDateTime {
 						lastDateTime = v.DateTime
 						// Parsed line
