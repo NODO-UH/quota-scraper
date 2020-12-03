@@ -19,8 +19,8 @@ var logErr *log.Logger
 var logInfo *log.Logger
 
 func init() {
-	logErr = log.New(os.Stderr, "ERROR: ", 1)
-	logInfo = log.New(os.Stdout, "INFO: ", 1)
+	logErr = log.New(os.Stderr, "ERROR [scraper]: ", 1)
+	logInfo = log.New(os.Stdout, "INFO [scraper]: ", 1)
 }
 
 type SquidData struct {

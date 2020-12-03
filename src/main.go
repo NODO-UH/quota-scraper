@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/NODO-UH/quota-scraper/src/database"
 	"github.com/NODO-UH/quota-scraper/src/scraper"
 )
 
@@ -14,8 +15,8 @@ var logErr *log.Logger
 var logInfo *log.Logger
 
 func init() {
-	logErr = log.New(os.Stderr, "ERROR: ", 1)
-	logInfo = log.New(os.Stdout, "INFO: ", 1)
+	logErr = log.New(os.Stderr, "ERROR [main]: ", 1)
+	logInfo = log.New(os.Stdout, "INFO [main]: ", 1)
 }
 
 func main() {
@@ -27,6 +28,8 @@ func main() {
 
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
+	} else {
+		database.StartDatabase(*db_uri)
 	}
 
 	alreadyOpenError := false
