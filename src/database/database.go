@@ -11,6 +11,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 var logErr *log.Logger
@@ -45,20 +46,31 @@ func handler() {
 }
 
 func StartDatabase(uri string) {
-	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+
 	if err != nil {
 		logErr.Fatal(err)
 	}
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	if err = client.Connect(ctx); err != nil {
+
+	defer func() {
+		if err = client.Disconnect(ctx); err != nil {
+			logErr.Fatal(err)
+		}
+	}()
+
+	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		logErr.Fatal(err)
 	}
-	globalCollection = client.Database("squid-scraper").Collection("global")
-	currentMonthCollection = client.Database("squid-scraper").Collection("current-month")
+
+	globalCollection = client.Database("quota").Collection("global")
+	currentMonthCollection = client.Database("quota").Collection("current_month")
 
 	handler()
 
-	defer client.Disconnect(ctx)
+	logInfo.Println("Successfully connected and pinged.")
 }
 
 func AddQuotalog(ql *Quotalog) {
