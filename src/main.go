@@ -29,8 +29,10 @@ func main() {
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		database.StartDatabase(*db_uri)
+		go database.StartDatabase(*db_uri)
 	}
+
+	<-database.UpOk
 
 	alreadyOpenError := false
 	var lastDateTime float64 = 0

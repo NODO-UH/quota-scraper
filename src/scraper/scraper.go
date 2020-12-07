@@ -36,6 +36,12 @@ func parseQuotaLog(l string) *database.Quotalog {
 		logErr.Println("unexpected squid line")
 		return nil
 	}
+
+	// Check TCP_STATUS
+	if words[3] == "TCP_DENIED/407" {
+		return nil
+	}
+
 	sd := database.Quotalog{}
 	if date_time, err := strconv.ParseFloat(words[0], 64); err != nil {
 		logErr.Println(err)
@@ -60,7 +66,7 @@ func parseQuotaLog(l string) *database.Quotalog {
 		logErr.Println(fmt.Sprintf("invalid ip %s", words[2]))
 		return nil
 	} else {
-		sd.From = from
+		sd.From = from.String()
 	}
 	return &sd
 }
@@ -79,7 +85,9 @@ func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 
 func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
 	for sd, eof := parseLine(r); !eof; sd, eof = parseLine(r) {
-		sds = append(sds, sd)
+		if sd != nil {
+			sds = append(sds, sd)
+		}
 	}
 	return
 }
@@ -90,7 +98,8 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 	// Read initial lines
 	for _, v := range readLines(reader) {
 		if v.DateTime > lastDateTime {
-			logInfo.Println(v)
+			lastDateTime = v.DateTime
+			database.AddQuotalog(v)
 		}
 	}
 
@@ -113,8 +122,7 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 				for _, v := range readLines(reader) {
 					if v.DateTime > lastDateTime {
 						lastDateTime = v.DateTime
-						// Parsed line
-						logInfo.Println(v)
+						database.AddQuotalog(v)
 					}
 				}
 			default:
