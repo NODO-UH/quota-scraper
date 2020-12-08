@@ -3,11 +3,8 @@ package scraper
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -56,18 +53,8 @@ func parseQuotaLog(l string) *database.Quotalog {
 	} else {
 		sd.Size = size
 	}
-	if ul, err := url.Parse(words[6]); err != nil {
-		logErr.Println(err)
-		return nil
-	} else {
-		sd.Url = ul
-	}
-	if from := net.ParseIP(words[2]); from == nil {
-		logErr.Println(fmt.Sprintf("invalid ip %s", words[2]))
-		return nil
-	} else {
-		sd.From = from.String()
-	}
+	sd.Url = strings.TrimSpace(words[6])
+	sd.From = strings.TrimSpace(words[2])
 	return &sd
 }
 

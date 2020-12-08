@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"time"
 
@@ -25,7 +24,7 @@ type Quotalog struct {
 	DateTime float64
 	User     string
 	Size     int64
-	Url      *url.URL
+	Url      string
 	From     string
 }
 
