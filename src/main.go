@@ -26,7 +26,7 @@ func main() {
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
 	flag.Parse()
 
-	logInfo.Printf("setting up with %d cores", cores)
+	logInfo.Printf("setting up with %d cores", *cores)
 	runtime.GOMAXPROCS(*cores)
 
 	logInfo.Println(fmt.Sprintf("squid file: %s", *squid_file))
