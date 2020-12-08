@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -28,6 +29,13 @@ type Quotalog struct {
 	From     string
 }
 
+type QuotaMonth struct {
+	User     string
+	Max      int64
+	Consumed int64
+	Enabled  bool
+}
+
 func (ql Quotalog) String() string {
 	return fmt.Sprintf("DT: %f, User: %s, Size: %d, Url: %s, From: %s", ql.DateTime, ql.User, ql.Size, ql.Url, ql.From)
 }
@@ -41,9 +49,39 @@ func init() {
 func Handler() {
 	qlChan = make(chan *Quotalog, 1)
 	for {
+		// Send log to history
 		ql := <-qlChan
 		if _, err := historyCollection.InsertOne(context.TODO(), ql); err != nil {
 			logErr.Println(err)
+		}
+		// Update current month
+		userMonth := QuotaMonth{}
+		filter := bson.M{"user": ql.User}
+		if err := currentMonthCollection.FindOne(context.Background(), filter).Decode(&userMonth); err != nil {
+			if err == mongo.ErrNoDocuments {
+				// User not found in current month
+				if _, err := currentMonthCollection.InsertOne(context.TODO(), QuotaMonth{
+					User:     ql.User,
+					Max:      8000000,
+					Consumed: ql.Size,
+					Enabled:  true,
+				}); err != nil {
+					logErr.Println(err)
+				}
+				// TODO: Check if Consumed > Max
+			}
+		} else if userMonth.Enabled {
+			// User found and quota enabled
+			_, err := currentMonthCollection.UpdateOne(
+				context.Background(),
+				bson.M{"user": userMonth.User},
+				bson.D{
+					{"$set", bson.D{{"consumed", userMonth.Consumed + ql.Size}}},
+				},
+			)
+			if err != nil {
+				logErr.Println(err)
+			}
 		}
 	}
 }
