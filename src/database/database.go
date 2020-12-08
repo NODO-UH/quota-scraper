@@ -15,6 +15,7 @@ import (
 
 var logErr *log.Logger
 var logInfo *log.Logger
+var dbStatus *mongo.Collection
 var historyCollection *mongo.Collection
 var currentMonthCollection *mongo.Collection
 var qlChan chan *Quotalog
@@ -35,6 +36,11 @@ type QuotaMonth struct {
 	Enabled  bool
 }
 
+type DBProperty struct {
+	Prop  string
+	Value interface{}
+}
+
 func (ql Quotalog) String() string {
 	return fmt.Sprintf("DT: %f, User: %s, Size: %d, Url: %s, From: %s", ql.DateTime, ql.User, ql.Size, ql.Url, ql.From)
 }
@@ -51,6 +57,16 @@ func Handler() {
 		// Send log to history
 		ql := <-qlChan
 		if _, err := historyCollection.InsertOne(context.TODO(), ql); err != nil {
+			logErr.Println(err)
+		}
+		// Update last date time
+		if _, err := dbStatus.UpdateOne(
+			context.Background(),
+			bson.M{"prop": "lastDateTime"},
+			bson.D{
+				{"$set", bson.D{{"value", ql.DateTime}}},
+			},
+		); err != nil {
 			logErr.Println(err)
 		}
 		// Update current month
@@ -85,6 +101,32 @@ func Handler() {
 	}
 }
 
+func GetLastDateTime() float64 {
+	lastDateTime := DBProperty{}
+	// Load db status
+	if err := dbStatus.FindOne(context.Background(), bson.M{"prop": "lastDateTime"}).Decode(&lastDateTime); err != nil {
+		if err == mongo.ErrNoDocuments {
+			lastDateTime = DBProperty{
+				Prop:  "lastDateTime",
+				Value: 0,
+			}
+			// Create db status
+			if _, err := dbStatus.InsertOne(context.TODO(), lastDateTime); err != nil {
+				logErr.Println(err)
+			}
+		} else {
+			logErr.Println(err)
+		}
+		return 0
+	}
+	switch t := lastDateTime.Value.(type) {
+	case float64:
+		return t
+	default:
+		return 0
+	}
+}
+
 func StartDatabase(uri string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -105,6 +147,7 @@ func StartDatabase(uri string) {
 		logErr.Fatal(err)
 	}
 
+	dbStatus = client.Database("quota").Collection("status")
 	historyCollection = client.Database("quota").Collection("history")
 	currentMonthCollection = client.Database("quota").Collection("current_month")
 

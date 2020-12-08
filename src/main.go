@@ -40,7 +40,7 @@ func main() {
 	<-database.UpOk
 
 	alreadyOpenError := false
-	var lastDateTime float64 = 0
+	var lastDateTime float64 = database.GetLastDateTime()
 
 	for {
 		file, err := os.Open(*squid_file)
