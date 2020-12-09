@@ -23,7 +23,7 @@ func init() {
 func main() {
 	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
 	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
-	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
+	cores := flag.Int("cores", runtime.NumCPU(), "Max number of cores")
 	flag.Parse()
 
 	logInfo.Printf("setting up with %d cores", *cores)
