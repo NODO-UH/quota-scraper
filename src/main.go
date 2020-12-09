@@ -53,6 +53,7 @@ func main() {
 			logInfo.Println(fmt.Sprintf("parsing file %s", file.Name()))
 			alreadyOpenError = false
 			err, lastDateTime = scraper.ParseFile(file, lastDateTime)
+			file.Close()
 			logErr.Println(err)
 		}
 		time.Sleep(3 * time.Second)

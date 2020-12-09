@@ -58,6 +58,18 @@ func parseQuotaLog(l string) *database.Quotalog {
 	return &sd
 }
 
+func parseFirstLine(r *bufio.Reader) (*database.Quotalog, bool, int) {
+	line_str, _, err := r.ReadLine()
+	if err != nil {
+		if err == io.EOF {
+			return nil, true, len(line_str)
+		}
+		logErr.Println(err)
+		return nil, false, len(line_str)
+	}
+	return parseQuotaLog(string(line_str)), false, len(line_str)
+}
+
 func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 	line_str, _, err := r.ReadLine()
 	if err != nil {
@@ -106,6 +118,12 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 		case event := <-watcher.Events:
 			switch event.Op {
 			case fsnotify.Write:
+				// WRITE and EOF => TRUNCATE
+				if v, eof, count := parseFirstLine(reader); eof && count == 0 {
+					return errors.New("truncated file"), lastDateTime
+				} else {
+					database.AddQuotalog(v)
+				}
 				for _, v := range readLines(reader) {
 					if v.DateTime > lastDateTime {
 						lastDateTime = v.DateTime
