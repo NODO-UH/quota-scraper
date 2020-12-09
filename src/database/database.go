@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -127,7 +128,9 @@ func GetLastDateTime() float64 {
 	}
 }
 
-func StartDatabase(uri string) {
+func StartDatabase(uri string, writer io.Writer) {
+	logErr.SetOutput(writer)
+	logInfo.SetOutput(writer)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 

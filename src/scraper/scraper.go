@@ -19,6 +19,10 @@ func init() {
 	logErr = log.New(os.Stderr, "ERROR [scraper]: ", 1)
 }
 
+func SetLogOutput(writer io.Writer)  {
+	logErr.SetOutput(writer)
+}
+
 func parseQuotaLog(l string) *database.Quotalog {
 	_words := strings.Split(l, " ")
 	var words []string
