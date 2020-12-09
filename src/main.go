@@ -21,20 +21,20 @@ func init() {
 }
 
 func main() {
-	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
-	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
+	squidFile := flag.String("file", "squid.logs", "Path to squid file with logs")
+	dbUri := flag.String("db-uri", "", "MongoDB Connection URI")
 	cores := flag.Int("cores", runtime.NumCPU(), "Max number of cores")
 	flag.Parse()
 
 	logInfo.Printf("setting up with %d cores", *cores)
 	runtime.GOMAXPROCS(*cores)
 
-	logInfo.Println(fmt.Sprintf("squid file: %s", *squid_file))
+	logInfo.Println(fmt.Sprintf("squid file: %s", *squidFile))
 
-	if *db_uri == "" {
+	if *dbUri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri)
+		go database.StartDatabase(*dbUri)
 	}
 
 	<-database.UpOk
@@ -43,7 +43,7 @@ func main() {
 	var lastDateTime float64 = database.GetLastDateTime()
 
 	for {
-		file, err := os.Open(*squid_file)
+		file, err := os.Open(*squidFile)
 		if err != nil {
 			if !alreadyOpenError {
 				logErr.Println(err)
@@ -53,6 +53,9 @@ func main() {
 			logInfo.Println(fmt.Sprintf("parsing file %s", file.Name()))
 			alreadyOpenError = false
 			err, lastDateTime = scraper.ParseFile(file, lastDateTime)
+			if err == nil {
+				continue
+			}
 			logErr.Println(err)
 		}
 		time.Sleep(3 * time.Second)
