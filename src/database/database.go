@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -49,6 +50,11 @@ func init() {
 	logErr = log.New(os.Stderr, "ERROR [database]: ", 1)
 	logInfo = log.New(os.Stdout, "INFO [database]: ", 1)
 	UpOk = make(chan bool, 1)
+}
+
+func SetLogOutput(w io.Writer) {
+	logInfo.SetOutput(w)
+	logErr.SetOutput(w)
 }
 
 func Handler() {

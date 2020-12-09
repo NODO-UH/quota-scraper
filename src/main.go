@@ -24,7 +24,17 @@ func main() {
 	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
 	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
+	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
 	flag.Parse()
+
+	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+		logErr.Fatal(err)
+	} else {
+		logInfo.SetOutput(logsFile)
+		logErr.SetOutput(logsFile)
+		database.SetLogOutput(logsFile)
+		scraper.SetLogOutput(logsFile)
+	}
 
 	logInfo.Printf("setting up with %d cores", *cores)
 	runtime.GOMAXPROCS(*cores)
