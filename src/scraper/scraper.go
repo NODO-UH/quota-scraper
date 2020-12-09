@@ -14,11 +14,9 @@ import (
 )
 
 var logErr *log.Logger
-var logInfo *log.Logger
 
 func init() {
 	logErr = log.New(os.Stderr, "ERROR [scraper]: ", 1)
-	logInfo = log.New(os.Stdout, "INFO [scraper]: ", 1)
 }
 
 func parseQuotaLog(l string) *database.Quotalog {
@@ -40,11 +38,11 @@ func parseQuotaLog(l string) *database.Quotalog {
 	}
 
 	sd := database.Quotalog{}
-	if date_time, err := strconv.ParseFloat(words[0], 64); err != nil {
+	if dateTime, err := strconv.ParseFloat(words[0], 64); err != nil {
 		logErr.Println(err)
 		return nil
 	} else {
-		sd.DateTime = date_time
+		sd.DateTime = dateTime
 	}
 	sd.User = words[7]
 	if size, err := strconv.ParseInt(words[4], 10, 64); err != nil {
@@ -59,7 +57,7 @@ func parseQuotaLog(l string) *database.Quotalog {
 }
 
 func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
-	line_str, _, err := r.ReadLine()
+	lineStr, _, err := r.ReadLine()
 	if err != nil {
 		if err == io.EOF {
 			return nil, true
@@ -67,7 +65,7 @@ func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 		logErr.Println(err)
 		return nil, false
 	}
-	return parseQuotaLog(string(line_str)), false
+	return parseQuotaLog(string(lineStr)), false
 }
 
 func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
@@ -90,7 +88,7 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 		}
 	}
 
-	// Suscribe to file changes
+	// Subscribe to file changes
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err, lastDateTime
@@ -106,11 +104,16 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 		case event := <-watcher.Events:
 			switch event.Op {
 			case fsnotify.Write:
+				isTruncated := true
 				for _, v := range readLines(reader) {
 					if v.DateTime > lastDateTime {
 						lastDateTime = v.DateTime
 						database.AddQuotalog(v)
+						isTruncated = false
 					}
+				}
+				if isTruncated {
+					return nil, lastDateTime
 				}
 			default:
 				return errors.New("unexpected watcher event"), lastDateTime
