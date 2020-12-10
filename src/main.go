@@ -17,8 +17,6 @@ var logInfo *log.Logger
 var hostName string
 
 func init() {
-	logErr = log.New(os.Stderr, "ERROR [main]: ", 1)
-	logInfo = log.New(os.Stdout, "INFO [main]: ", 1)
 	hostName, _ = os.Hostname()
 }
 
@@ -30,11 +28,11 @@ func main() {
 	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
 	flag.Parse()
 
-	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
 		logErr.Fatal(err)
 	} else {
-		logInfo.SetOutput(logsFile)
-		logErr.SetOutput(logsFile)
+		logErr = log.New(logsFile, "ERROR [main] ", log.LstdFlags|log.Lmsgprefix)
+		logInfo = log.New(logsFile, "INFO [main] ", log.LstdFlags|log.Lmsgprefix)
 		database.SetLogOutput(logsFile)
 		scraper.SetLogOutput(logsFile)
 	}
