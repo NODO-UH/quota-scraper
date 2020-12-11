@@ -119,7 +119,7 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 		// Not exists => Insert new in current month
 		if _, err := currentMonthCollection.InsertOne(context.TODO(), QuotaMonth{
 			User:     ql.User,
-			Max:      50000,
+			Max:      8589934592,
 			Consumed: ql.Size,
 			Enabled:  true,
 		}); err != nil {
