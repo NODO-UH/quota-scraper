@@ -85,7 +85,6 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 		bson.D{
 			{"$inc", bson.D{{"consumed", ql.Size}}},
 		})
-
 	err := result.Err()
 	if err == nil {
 		userMonth := QuotaMonth{}
@@ -116,16 +115,8 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 		}
 
 	} else if err == mongo.ErrNoDocuments {
-		// Not exists => Insert new in current month
-		if _, err := currentMonthCollection.InsertOne(context.TODO(), QuotaMonth{
-			User:     ql.User,
-			Max:      8589934592,
-			Consumed: ql.Size,
-			Enabled:  true,
-		}); err != nil {
-			logErr.Println(err)
-			return err
-		}
+		// User not found in current_month
+		logErr.Printf("unkown user %s in current_month\n", ql.User)
 	} else {
 		// Unexpected error
 		logErr.Println(err)
