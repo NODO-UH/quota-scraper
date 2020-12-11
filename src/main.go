@@ -17,8 +17,6 @@ var logInfo *log.Logger
 var hostName string
 
 func init() {
-	logErr = log.New(os.Stderr, "ERROR [main]: ", 1)
-	logInfo = log.New(os.Stdout, "INFO [main]: ", 1)
 	hostName, _ = os.Hostname()
 }
 
@@ -28,13 +26,14 @@ func main() {
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
 	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
 	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
+	cutFile := flag.String("cut-file", "cut.list", "file to insert over quota users")
 	flag.Parse()
 
-	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
+	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
 		logErr.Fatal(err)
 	} else {
-		logInfo.SetOutput(logsFile)
-		logErr.SetOutput(logsFile)
+		logErr = log.New(logsFile, "ERROR [main] ", log.LstdFlags|log.Lmsgprefix)
+		logInfo = log.New(logsFile, "INFO [main] ", log.LstdFlags|log.Lmsgprefix)
 		database.SetLogOutput(logsFile)
 		scraper.SetLogOutput(logsFile)
 	}
@@ -47,7 +46,7 @@ func main() {
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri, *scraperId)
+		go database.StartDatabase(*db_uri, *scraperId, *cutFile)
 	}
 
 	<-database.UpOk

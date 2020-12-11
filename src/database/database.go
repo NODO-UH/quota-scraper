@@ -39,8 +39,8 @@ type QuotaMonth struct {
 
 type DBProperty struct {
 	ScraperId string
-	Prop     string
-	Value    interface{}
+	Prop      string
+	Value     interface{}
 }
 
 func (ql Quotalog) String() string {
@@ -48,62 +48,105 @@ func (ql Quotalog) String() string {
 }
 
 func init() {
-	logErr = log.New(os.Stderr, "ERROR [database]: ", 1)
-	logInfo = log.New(os.Stdout, "INFO [database]: ", 1)
 	UpOk = make(chan bool, 1)
 }
 
 func SetLogOutput(w io.Writer) {
-	logInfo.SetOutput(w)
-	logErr.SetOutput(w)
+	logErr = log.New(w, "ERROR [database]: ", log.LstdFlags|log.Lmsgprefix)
+	logInfo = log.New(w, "INFO [database]: ", log.LstdFlags|log.Lmsgprefix)
 }
 
-func Handler(scraperId string) {
+func AddHistory(ql *Quotalog) error {
+	if _, err := historyCollection.InsertOne(context.TODO(), ql); err != nil {
+		logErr.Println(err)
+		return err
+	}
+	return nil
+}
+
+func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
+	if _, err := dbStatus.UpdateOne(
+		context.Background(),
+		bson.M{"prop": "lastDateTime", "scraperid": scraperId},
+		bson.D{
+			{"$set", bson.D{{"value", lastDateTime}}},
+		},
+	); err != nil {
+		logErr.Println(err)
+		return err
+	}
+	return nil
+}
+
+func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
+	result := currentMonthCollection.FindOneAndUpdate(
+		context.Background(),
+		bson.M{"user": ql.User},
+		bson.D{
+			{"$inc", bson.D{{"consumed", ql.Size}}},
+		})
+
+	err := result.Err()
+	if err == nil {
+		userMonth := QuotaMonth{}
+		if err := result.Decode(&userMonth); err != nil {
+			logErr.Println(err)
+			return err
+		} else {
+
+			// Check for cut
+			if userMonth.Enabled && userMonth.Consumed+ql.Size > userMonth.Max {
+				logInfo.Printf("CUT %s", userMonth.User)
+
+				// Cut in squid file
+				if file, err := os.OpenFile(cutFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
+					logErr.Println(err)
+				} else {
+					file.WriteString(fmt.Sprintf("%s\n", ql.User))
+				}
+
+				// Set Enabled to false
+				currentMonthCollection.FindOneAndUpdate(
+					context.Background(),
+					bson.M{"user": ql.User},
+					bson.D{
+						{"$set", bson.D{{"enabled", false}}},
+					})
+			}
+		}
+
+	} else if err == mongo.ErrNoDocuments {
+		// Not exists => Insert new in current month
+		if _, err := currentMonthCollection.InsertOne(context.TODO(), QuotaMonth{
+			User:     ql.User,
+			Max:      8589934592,
+			Consumed: ql.Size,
+			Enabled:  true,
+		}); err != nil {
+			logErr.Println(err)
+			return err
+		}
+	} else {
+		// Unexpected error
+		logErr.Println(err)
+		return err
+	}
+	return nil
+}
+
+func Handler(scraperId string, cutFile string) {
 	qlChan = make(chan *Quotalog, 1)
 	for {
-		// Send log to history
+		// Wait for new QuotaLog
 		ql := <-qlChan
-		if _, err := historyCollection.InsertOne(context.TODO(), ql); err != nil {
-			logErr.Println(err)
-		}
-		// Update last date time
-		if _, err := dbStatus.UpdateOne(
-			context.Background(),
-			bson.M{"prop": "lastDateTime", "scraperid": scraperId},
-			bson.D{
-				{"$set", bson.D{{"value", ql.DateTime}}},
-			},
-		); err != nil {
-			logErr.Println(err)
-		}
-		// Update current month
-		userMonth := QuotaMonth{}
-		filter := bson.M{"user": ql.User}
-		if err := currentMonthCollection.FindOne(context.Background(), filter).Decode(&userMonth); err != nil {
-			if err == mongo.ErrNoDocuments {
-				// User not found in current month
-				if _, err := currentMonthCollection.InsertOne(context.TODO(), QuotaMonth{
-					User:     ql.User,
-					Max:      8000000,
-					Consumed: ql.Size,
-					Enabled:  true,
-				}); err != nil {
-					logErr.Println(err)
-				}
-				// TODO: Check if Consumed > Max
-			}
-		} else if userMonth.Enabled {
-			// User found and quota enabled
-			_, err := currentMonthCollection.UpdateOne(
-				context.Background(),
-				bson.M{"user": userMonth.User},
-				bson.D{
-					{"$set", bson.D{{"consumed", userMonth.Consumed + ql.Size}}},
-				},
-			)
-			if err != nil {
-				logErr.Println(err)
-			}
+
+		// Send log to history
+		if err := AddHistory(ql); err == nil {
+			// Update LastDateTime
+			UpdateLastDateTime(ql.DateTime, scraperId)
+
+			// Update current month
+			UpdateCurrentMonth(ql, cutFile)
 		}
 	}
 }
@@ -115,8 +158,8 @@ func GetLastDateTime(scraperId string) float64 {
 		if err == mongo.ErrNoDocuments {
 			lastDateTime = DBProperty{
 				ScraperId: scraperId,
-				Prop:     "lastDateTime",
-				Value:    0,
+				Prop:      "lastDateTime",
+				Value:     0,
 			}
 			// Create db status
 			if _, err := dbStatus.InsertOne(context.TODO(), lastDateTime); err != nil {
@@ -135,7 +178,7 @@ func GetLastDateTime(scraperId string) float64 {
 	}
 }
 
-func StartDatabase(uri string, scraperId string) {
+func StartDatabase(uri string, scraperId string, cutFile string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -163,7 +206,7 @@ func StartDatabase(uri string, scraperId string) {
 
 	UpOk <- true
 
-	Handler(scraperId)
+	Handler(scraperId, cutFile)
 
 }
 

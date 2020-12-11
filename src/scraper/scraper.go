@@ -15,10 +15,6 @@ import (
 
 var logErr *log.Logger
 
-func init() {
-	logErr = log.New(os.Stderr, "ERROR [scraper]: ", 1)
-}
-
 func parseQuotaLog(l string) *database.Quotalog {
 	_words := strings.Split(l, " ")
 	var words []string
@@ -90,7 +86,7 @@ func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
 }
 
 func SetLogOutput(w io.Writer) {
-	logErr.SetOutput(w)
+	logErr = log.New(w, "ERROR [scraper]: ", log.LstdFlags|log.Lmsgprefix)
 }
 
 func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
