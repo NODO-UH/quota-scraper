@@ -26,6 +26,7 @@ func main() {
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
 	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
 	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
+	cutFile := flag.String("cut-file", "cut.list", "file to insert over quota users")
 	flag.Parse()
 
 	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
@@ -45,7 +46,7 @@ func main() {
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri, *scraperId)
+		go database.StartDatabase(*db_uri, *scraperId, *cutFile)
 	}
 
 	<-database.UpOk

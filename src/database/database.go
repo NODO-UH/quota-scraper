@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -77,7 +78,7 @@ func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
 	return nil
 }
 
-func UpdateCurrentMonth(ql *Quotalog) error {
+func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 	result := currentMonthCollection.FindOneAndUpdate(
 		context.Background(),
 		bson.M{"user": ql.User},
@@ -97,7 +98,12 @@ func UpdateCurrentMonth(ql *Quotalog) error {
 			if userMonth.Enabled && userMonth.Consumed+ql.Size > userMonth.Max {
 				logInfo.Printf("CUT %s", userMonth.User)
 
-				// TODO: Cut in squid file
+				// Cut in squid file
+				if file, err := os.OpenFile(cutFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
+					logErr.Println(err)
+				} else {
+					file.WriteString(fmt.Sprintf("%s\n", ql.User))
+				}
 
 				// Set Enabled to false
 				currentMonthCollection.FindOneAndUpdate(
@@ -128,7 +134,7 @@ func UpdateCurrentMonth(ql *Quotalog) error {
 	return nil
 }
 
-func Handler(scraperId string) {
+func Handler(scraperId string, cutFile string) {
 	qlChan = make(chan *Quotalog, 1)
 	for {
 		// Wait for new QuotaLog
@@ -140,7 +146,7 @@ func Handler(scraperId string) {
 			UpdateLastDateTime(ql.DateTime, scraperId)
 
 			// Update current month
-			UpdateCurrentMonth(ql)
+			UpdateCurrentMonth(ql, cutFile)
 		}
 	}
 }
@@ -172,7 +178,7 @@ func GetLastDateTime(scraperId string) float64 {
 	}
 }
 
-func StartDatabase(uri string, scraperId string) {
+func StartDatabase(uri string, scraperId string, cutFile string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -200,7 +206,7 @@ func StartDatabase(uri string, scraperId string) {
 
 	UpOk <- true
 
-	Handler(scraperId)
+	Handler(scraperId, cutFile)
 
 }
 
