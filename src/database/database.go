@@ -38,8 +38,9 @@ type QuotaMonth struct {
 }
 
 type DBProperty struct {
-	Prop  string
-	Value interface{}
+	ScraperId string
+	Prop     string
+	Value    interface{}
 }
 
 func (ql Quotalog) String() string {
@@ -57,7 +58,7 @@ func SetLogOutput(w io.Writer) {
 	logErr.SetOutput(w)
 }
 
-func Handler() {
+func Handler(scraperId string) {
 	qlChan = make(chan *Quotalog, 1)
 	for {
 		// Send log to history
@@ -68,7 +69,7 @@ func Handler() {
 		// Update last date time
 		if _, err := dbStatus.UpdateOne(
 			context.Background(),
-			bson.M{"prop": "lastDateTime"},
+			bson.M{"prop": "lastDateTime", "scraperid": scraperId},
 			bson.D{
 				{"$set", bson.D{{"value", ql.DateTime}}},
 			},
@@ -107,14 +108,15 @@ func Handler() {
 	}
 }
 
-func GetLastDateTime() float64 {
+func GetLastDateTime(scraperId string) float64 {
 	lastDateTime := DBProperty{}
 	// Load db status
-	if err := dbStatus.FindOne(context.Background(), bson.M{"prop": "lastDateTime"}).Decode(&lastDateTime); err != nil {
+	if err := dbStatus.FindOne(context.Background(), bson.M{"prop": "lastDateTime", "scraperid": scraperId}).Decode(&lastDateTime); err != nil {
 		if err == mongo.ErrNoDocuments {
 			lastDateTime = DBProperty{
-				Prop:  "lastDateTime",
-				Value: 0,
+				ScraperId: scraperId,
+				Prop:     "lastDateTime",
+				Value:    0,
 			}
 			// Create db status
 			if _, err := dbStatus.InsertOne(context.TODO(), lastDateTime); err != nil {
@@ -133,7 +135,7 @@ func GetLastDateTime() float64 {
 	}
 }
 
-func StartDatabase(uri string) {
+func StartDatabase(uri string, scraperId string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -161,7 +163,7 @@ func StartDatabase(uri string) {
 
 	UpOk <- true
 
-	Handler()
+	Handler(scraperId)
 
 }
 

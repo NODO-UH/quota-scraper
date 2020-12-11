@@ -14,10 +14,12 @@ import (
 
 var logErr *log.Logger
 var logInfo *log.Logger
+var hostName string
 
 func init() {
 	logErr = log.New(os.Stderr, "ERROR [main]: ", 1)
 	logInfo = log.New(os.Stdout, "INFO [main]: ", 1)
+	hostName, _ = os.Hostname()
 }
 
 func main() {
@@ -25,6 +27,7 @@ func main() {
 	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
 	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
+	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
 	flag.Parse()
 
 	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY, 0666); err != nil {
@@ -44,13 +47,13 @@ func main() {
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri)
+		go database.StartDatabase(*db_uri, *scraperId)
 	}
 
 	<-database.UpOk
 
 	alreadyOpenError := false
-	var lastDateTime float64 = database.GetLastDateTime()
+	var lastDateTime float64 = database.GetLastDateTime(*scraperId)
 
 	for {
 		file, err := os.Open(*squid_file)
