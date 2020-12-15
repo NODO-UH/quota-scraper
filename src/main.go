@@ -10,6 +10,7 @@ import (
 
 	"github.com/NODO-UH/quota-scraper/src/database"
 	"github.com/NODO-UH/quota-scraper/src/scraper"
+	"github.com/NODO-UH/quota-scraper/src/squid"
 )
 
 var logErr *log.Logger
@@ -27,6 +28,7 @@ func main() {
 	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
 	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
 	cutFile := flag.String("cut-file", "cut.list", "file to insert over quota users")
+	reloadSquid := flag.String("reload", "reload.sh", "script for reload Squid service")
 	flag.Parse()
 
 	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
@@ -36,6 +38,7 @@ func main() {
 		logInfo = log.New(logsFile, "INFO [main] ", log.LstdFlags|log.Lmsgprefix)
 		database.SetLogOutput(logsFile)
 		scraper.SetLogOutput(logsFile)
+		squid.SetLogOutput(logsFile)
 	}
 
 	logInfo.Printf("setting up with %d cores", *cores)
@@ -50,6 +53,9 @@ func main() {
 	}
 
 	<-database.UpOk
+
+	// Set path of script for reload Squid service
+	squid.SetReloadScript(*reloadSquid)
 
 	alreadyOpenError := false
 	var lastDateTime float64 = database.GetLastDateTime(*scraperId)

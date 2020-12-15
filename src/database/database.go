@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/NODO-UH/quota-scraper/src/squid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -111,6 +112,9 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 					bson.D{
 						{"$set", bson.D{{"enabled", false}}},
 					})
+
+				// Reload Squid service
+				squid.Reload()
 			}
 		}
 
@@ -198,7 +202,6 @@ func StartDatabase(uri string, scraperId string, cutFile string) {
 	UpOk <- true
 
 	Handler(scraperId, cutFile)
-
 }
 
 func AddQuotalog(ql *Quotalog) {
