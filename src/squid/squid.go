@@ -3,9 +3,11 @@ package squid
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 var logErr *log.Logger
@@ -46,3 +48,37 @@ func Cut(user string) {
 	}
 }
 
+func Uncut(user string) error {
+	if cutFile, err := os.OpenFile(cutPath, os.O_RDWR, 0666); err != nil { // Open cut file
+		logErr.Println(err)
+	} else if dataB, err := ioutil.ReadAll(cutFile); err != nil {
+		logErr.Println(err)
+		return err
+	} else {
+		// Remove line with user to uncut
+		data := string(dataB)
+		lines := strings.Split(data, "\n")
+		var newLines []string
+		for _, l := range lines {
+			if user != l {
+				newLines = append(newLines, l)
+			}
+		}
+		// Rewrite other users to cut file
+		if err := cutFile.Truncate(0); err != nil {
+			logErr.Println(err)
+			return err
+		}
+		if _, err := cutFile.Seek(0, 0); err != nil {
+			logErr.Println(err)
+			return err
+		}
+		if _, err := cutFile.WriteString(strings.Join(newLines, "\n")); err != nil {
+			logErr.Println(err)
+			return err
+		}
+		// Reload squid service
+		Reload()
+	}
+	return nil
+}
