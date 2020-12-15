@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"time"
 
 	"github.com/NODO-UH/quota-scraper/src/squid"
@@ -79,7 +78,7 @@ func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
 	return nil
 }
 
-func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
+func UpdateCurrentMonth(ql *Quotalog) error {
 	result := currentMonthCollection.FindOneAndUpdate(
 		context.Background(),
 		bson.M{"user": ql.User},
@@ -99,11 +98,7 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 				logInfo.Printf("CUT %s", userMonth.User)
 
 				// Cut in squid file
-				if file, err := os.OpenFile(cutFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
-					logErr.Println(err)
-				} else {
-					file.WriteString(fmt.Sprintf("%s\n", ql.User))
-				}
+				squid.Cut(ql.User)
 
 				// Set Enabled to false
 				currentMonthCollection.FindOneAndUpdate(
@@ -112,9 +107,6 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 					bson.D{
 						{"$set", bson.D{{"enabled", false}}},
 					})
-
-				// Reload Squid service
-				squid.Reload()
 			}
 		}
 
@@ -129,7 +121,7 @@ func UpdateCurrentMonth(ql *Quotalog, cutFile string) error {
 	return nil
 }
 
-func Handler(scraperId string, cutFile string) {
+func Handler(scraperId string) {
 	qlChan = make(chan *Quotalog, 1)
 	for {
 		// Wait for new QuotaLog
@@ -141,7 +133,7 @@ func Handler(scraperId string, cutFile string) {
 			UpdateLastDateTime(ql.DateTime, scraperId)
 
 			// Update current month
-			UpdateCurrentMonth(ql, cutFile)
+			UpdateCurrentMonth(ql)
 		}
 	}
 }
@@ -173,7 +165,7 @@ func GetLastDateTime(scraperId string) float64 {
 	}
 }
 
-func StartDatabase(uri string, scraperId string, cutFile string) {
+func StartDatabase(uri string, scraperId string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -201,7 +193,7 @@ func StartDatabase(uri string, scraperId string, cutFile string) {
 
 	UpOk <- true
 
-	Handler(scraperId, cutFile)
+	Handler(scraperId)
 }
 
 func AddQuotalog(ql *Quotalog) {
