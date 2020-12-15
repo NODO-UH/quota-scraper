@@ -49,13 +49,14 @@ func main() {
 	if *db_uri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri, *scraperId, *cutFile)
+		go database.StartDatabase(*db_uri, *scraperId)
 	}
 
 	<-database.UpOk
 
 	// Set path of script for reload Squid service
 	squid.SetReloadScript(*reloadSquid)
+	squid.SetCutFile(*cutFile)
 
 	alreadyOpenError := false
 	var lastDateTime float64 = database.GetLastDateTime(*scraperId)
