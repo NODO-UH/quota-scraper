@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -21,9 +22,56 @@ func init() {
 	hostName, _ = os.Hostname()
 }
 
+type ScraperConfig struct {
+	SquidFile   *string
+	DbUri       *string
+	Cores       *int
+	LogsPath    *string
+	ScraperId   *string
+	CutFile     *string
+	ReloadSquid *string
+}
+
+func ConfigFromFile(path string, flagConfig ScraperConfig) *ScraperConfig {
+	config := &ScraperConfig{}
+	if configFile, err := os.Open(path); err != nil {
+		logErr.Println(err)
+	} else {
+		jsonDecoder := json.NewDecoder(configFile)
+		if err = jsonDecoder.Decode(config); err != nil {
+			logErr.Println(err)
+		}
+	}
+
+	if config.SquidFile == nil {
+		config.SquidFile = flagConfig.SquidFile
+	}
+	if config.DbUri == nil {
+		config.DbUri = flagConfig.DbUri
+	}
+	if config.Cores == nil {
+		config.Cores = flagConfig.Cores
+	}
+	if config.LogsPath == nil {
+		config.LogsPath = flagConfig.LogsPath
+	}
+	if config.ScraperId == nil {
+		config.ScraperId = flagConfig.ScraperId
+	}
+	if config.CutFile == nil {
+		config.CutFile = flagConfig.CutFile
+	}
+	if config.ReloadSquid == nil {
+		config.ReloadSquid = flagConfig.ReloadSquid
+	}
+
+	return config
+}
+
 func main() {
-	squid_file := flag.String("file", "squid.logs", "Path to squid file with logs")
-	db_uri := flag.String("db-uri", "", "MongoDB Connection URI")
+	configFile := flag.String("config", "scraper-config.json", "path to JSON config file")
+	squidFile := flag.String("file", "squid.logs", "Path to squid file with logs")
+	dbUri := flag.String("db-uri", "", "MongoDB Connection URI")
 	cores := flag.Int("cores", runtime.NumCPU(), "max number of cores")
 	logsPath := flag.String("logs", "squid-parser.logs", "path to file for logs")
 	scraperId := flag.String("id", hostName, "unique id between all quota-scraper instances")
@@ -31,7 +79,17 @@ func main() {
 	reloadSquid := flag.String("reload", "reload.sh", "script for reload Squid service")
 	flag.Parse()
 
-	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
+	config := ConfigFromFile(*configFile, ScraperConfig{
+		SquidFile:   squidFile,
+		DbUri:       dbUri,
+		Cores:       cores,
+		LogsPath:    logsPath,
+		ScraperId:   scraperId,
+		CutFile:     cutFile,
+		ReloadSquid: reloadSquid,
+	})
+
+	if logsFile, err := os.OpenFile(*config.LogsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
 		logErr.Fatal(err)
 	} else {
 		logErr = log.New(logsFile, "ERROR [main] ", log.LstdFlags|log.Lmsgprefix)
@@ -41,28 +99,28 @@ func main() {
 		squid.SetLogOutput(logsFile)
 	}
 
-	logInfo.Printf("setting up with %d cores", *cores)
-	runtime.GOMAXPROCS(*cores)
+	logInfo.Printf("setting up with %d cores", *config.Cores)
+	runtime.GOMAXPROCS(*config.Cores)
 
-	logInfo.Println(fmt.Sprintf("squid file: %s", *squid_file))
+	logInfo.Println(fmt.Sprintf("squid file: %s", *config.SquidFile))
 
-	if *db_uri == "" {
+	if *config.DbUri == "" {
 		logErr.Fatal("mongodb connection uri is missing")
 	} else {
-		go database.StartDatabase(*db_uri, *scraperId)
+		go database.StartDatabase(*config.DbUri, *scraperId)
 	}
 
 	<-database.UpOk
 
 	// Set path of script for reload Squid service
-	squid.SetReloadScript(*reloadSquid)
-	squid.SetCutFile(*cutFile)
+	squid.SetReloadScript(*config.ReloadSquid)
+	squid.SetCutFile(*config.CutFile)
 
 	alreadyOpenError := false
-	var lastDateTime float64 = database.GetLastDateTime(*scraperId)
+	var lastDateTime float64 = database.GetLastDateTime(*config.ScraperId)
 
 	for {
-		file, err := os.Open(*squid_file)
+		file, err := os.Open(*config.SquidFile)
 		if err != nil {
 			if !alreadyOpenError {
 				logErr.Println(err)
