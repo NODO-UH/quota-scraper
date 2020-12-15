@@ -116,6 +116,7 @@ func handleUncut(w http.ResponseWriter, req *http.Request) {
 		})
 		return
 	} else {
+		Reload()
 		w.WriteHeader(http.StatusOK)
 	}
 }
