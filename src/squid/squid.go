@@ -1,10 +1,12 @@
 package squid
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,6 +28,7 @@ func SetReloadScript(script string) {
 
 func SetCutFile(cut string) {
 	cutPath = cut
+	setUpUncutServer()
 }
 
 func Reload() {
@@ -81,4 +84,45 @@ func Uncut(user string) error {
 		Reload()
 	}
 	return nil
+}
+
+type UncutError struct {
+	Message string
+}
+
+func handleUncut(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	e := json.NewEncoder(w)
+	if req.Method != http.MethodPost {
+		w.WriteHeader(http.StatusBadRequest)
+		e.Encode(UncutError{
+			Message: fmt.Sprintf("invalid method %s", req.Method),
+		})
+	}
+	keys, ok := req.URL.Query()["username"]
+	if !ok || len(keys[0]) < 1 {
+		w.WriteHeader(http.StatusBadRequest)
+		e.Encode(UncutError{
+			Message: "missing username param",
+		})
+		return
+	}
+	username := keys[0]
+	if err := Uncut(username); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		e.Encode(UncutError{
+			Message: err.Error(),
+		})
+		return
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func setUpUncutServer() {
+	http.HandleFunc("/uncut", handleUncut)
+	err := http.ListenAndServeTLS(":2100", "server.crt", "server.key", nil)
+	if err != nil {
+		logErr.Println(err)
+	}
 }
