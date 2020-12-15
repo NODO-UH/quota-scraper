@@ -98,6 +98,7 @@ func handleUncut(w http.ResponseWriter, req *http.Request) {
 		e.Encode(UncutError{
 			Message: fmt.Sprintf("invalid method %s", req.Method),
 		})
+		return
 	}
 	keys, ok := req.URL.Query()["username"]
 	if !ok || len(keys[0]) < 1 {
