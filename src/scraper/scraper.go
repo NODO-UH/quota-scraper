@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/NODO-UH/quota-scraper/src/database"
+	stats "github.com/NODO-UH/quota-scraper/src/prometheus"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -66,7 +67,9 @@ func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 
 func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
 	for sd, eof := parseLine(r); !eof; sd, eof = parseLine(r) {
+		stats.LogCountInc()
 		if sd != nil {
+			stats.LogValidInc()
 			sds = append(sds, sd)
 		}
 	}
