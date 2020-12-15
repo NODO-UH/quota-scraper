@@ -26,7 +26,6 @@ type ScraperConfig struct {
 	SquidFile   *string
 	DbUri       *string
 	Cores       *int
-	LogsPath    *string
 	ScraperId   *string
 	CutFile     *string
 	ReloadSquid *string
@@ -52,9 +51,6 @@ func ConfigFromFile(path string, flagConfig ScraperConfig) *ScraperConfig {
 	if config.Cores == nil {
 		config.Cores = flagConfig.Cores
 	}
-	if config.LogsPath == nil {
-		config.LogsPath = flagConfig.LogsPath
-	}
 	if config.ScraperId == nil {
 		config.ScraperId = flagConfig.ScraperId
 	}
@@ -79,17 +75,7 @@ func main() {
 	reloadSquid := flag.String("reload", "reload.sh", "script for reload Squid service")
 	flag.Parse()
 
-	config := ConfigFromFile(*configFile, ScraperConfig{
-		SquidFile:   squidFile,
-		DbUri:       dbUri,
-		Cores:       cores,
-		LogsPath:    logsPath,
-		ScraperId:   scraperId,
-		CutFile:     cutFile,
-		ReloadSquid: reloadSquid,
-	})
-
-	if logsFile, err := os.OpenFile(*config.LogsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
+	if logsFile, err := os.OpenFile(*logsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666); err != nil {
 		logErr.Fatal(err)
 	} else {
 		logErr = log.New(logsFile, "ERROR [main] ", log.LstdFlags|log.Lmsgprefix)
@@ -98,6 +84,15 @@ func main() {
 		scraper.SetLogOutput(logsFile)
 		squid.SetLogOutput(logsFile)
 	}
+
+	config := ConfigFromFile(*configFile, ScraperConfig{
+		SquidFile:   squidFile,
+		DbUri:       dbUri,
+		Cores:       cores,
+		ScraperId:   scraperId,
+		CutFile:     cutFile,
+		ReloadSquid: reloadSquid,
+	})
 
 	logInfo.Printf("setting up with %d cores", *config.Cores)
 	runtime.GOMAXPROCS(*config.Cores)
