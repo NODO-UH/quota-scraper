@@ -78,7 +78,7 @@ func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
 	return nil
 }
 
-func UpdateCurrentMonth(ql *Quotalog) error {
+func UpdateCurrentMonth(ql *Quotalog, scraperId string) error {
 	result := currentMonthCollection.FindOneAndUpdate(
 		context.Background(),
 		bson.M{"user": ql.User},
@@ -106,6 +106,7 @@ func UpdateCurrentMonth(ql *Quotalog) error {
 					bson.M{"user": ql.User},
 					bson.D{
 						{"$set", bson.D{{"enabled", false}}},
+						{"$set", bson.D{{"cutter", scraperId}}},
 					})
 			}
 		}
@@ -133,7 +134,7 @@ func Handler(scraperId string) {
 			UpdateLastDateTime(ql.DateTime, scraperId)
 
 			// Update current month
-			UpdateCurrentMonth(ql)
+			UpdateCurrentMonth(ql, scraperId)
 		}
 	}
 }
