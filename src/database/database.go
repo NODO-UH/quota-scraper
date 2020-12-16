@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/NODO-UH/quota-scraper/src/squid"
@@ -19,8 +21,10 @@ var logInfo *log.Logger
 var dbStatus *mongo.Collection
 var historyCollection *mongo.Collection
 var currentMonthCollection *mongo.Collection
+var freeCollection *mongo.Collection
 var qlChan chan *Quotalog
 var UpOk chan bool
+var freeRegexp *regexp.Regexp
 
 type Quotalog struct {
 	DateTime float64
@@ -41,6 +45,10 @@ type DBProperty struct {
 	ScraperId string
 	Prop      string
 	Value     interface{}
+}
+
+type QuotaFree struct {
+	Regex string
 }
 
 func (ql Quotalog) String() string {
@@ -79,6 +87,9 @@ func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
 }
 
 func UpdateCurrentMonth(ql *Quotalog, scraperId string) error {
+	if IsFree(ql.Url) {
+		return nil
+	}
 	result := currentMonthCollection.FindOneAndUpdate(
 		context.Background(),
 		bson.M{"user": ql.User},
@@ -189,6 +200,7 @@ func StartDatabase(uri string, scraperId string) {
 	dbStatus = client.Database("quota").Collection("status")
 	historyCollection = client.Database("quota").Collection("history")
 	currentMonthCollection = client.Database("quota").Collection("current_month")
+	freeCollection = client.Database("quota").Collection("free")
 
 	logInfo.Println("Successfully connected and pinged.")
 
@@ -199,4 +211,33 @@ func StartDatabase(uri string, scraperId string) {
 
 func AddQuotalog(ql *Quotalog) {
 	qlChan <- ql
+}
+
+func GetFreeRegex() []string {
+	freeRegexs := []string{}
+	if cursor, err := freeCollection.Find(context.TODO(), nil); err != nil {
+		logErr.Println(err)
+	} else {
+		if err = cursor.All(context.TODO(), freeRegexs); err != nil {
+			logErr.Println(err)
+		}
+	}
+	return freeRegexs
+}
+
+func LoadFree() {
+	// Get all regexs
+	regexs := GetFreeRegex()
+	// Join all regex
+	joinRegex := strings.Join(regexs, "|")
+	var err error
+	if freeRegexp, err = regexp.Compile(joinRegex); err != nil {
+		logErr.Println(err)
+	} else {
+		logInfo.Println("free regex builded")
+	}
+}
+
+func IsFree(domain string) bool {
+	return freeRegexp.MatchString(domain)
 }
