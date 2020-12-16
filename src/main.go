@@ -111,6 +111,9 @@ func main() {
 	squid.SetReloadScript(*config.ReloadSquid)
 	squid.SetCutFile(*config.CutFile)
 
+	// Load free
+	database.LoadFree()
+
 	alreadyOpenError := false
 	var lastDateTime float64 = database.GetLastDateTime(*config.ScraperId)
 

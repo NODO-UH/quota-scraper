@@ -214,27 +214,36 @@ func AddQuotalog(ql *Quotalog) {
 }
 
 func GetFreeRegex() []string {
-	freeRegexs := []string{}
-	if cursor, err := freeCollection.Find(context.TODO(), nil); err != nil {
+	freeRegexs := []QuotaFree{}
+	if cursor, err := freeCollection.Find(context.TODO(), bson.M{}); err != nil {
 		logErr.Println(err)
 	} else {
-		if err = cursor.All(context.TODO(), freeRegexs); err != nil {
+		if err = cursor.All(context.TODO(), &freeRegexs); err != nil {
 			logErr.Println(err)
 		}
 	}
-	return freeRegexs
+	regexs := []string{}
+	for _, r := range freeRegexs {
+		regexs = append(regexs, r.Regex)
+	}
+	return regexs
 }
 
 func LoadFree() {
 	// Get all regexs
 	regexs := GetFreeRegex()
-	// Join all regex
-	joinRegex := strings.Join(regexs, "|")
-	var err error
-	if freeRegexp, err = regexp.Compile(joinRegex); err != nil {
-		logErr.Println(err)
+	if len(regexs) == 0 {
+		logInfo.Println("not free regexs")
+		freeRegexp, _ = regexp.Compile("-")
 	} else {
-		logInfo.Println("free regex builded")
+		// Join all regex
+		joinRegex := strings.Join(regexs, "|")
+		var err error
+		if freeRegexp, err = regexp.Compile(joinRegex); err != nil {
+			logErr.Println(err)
+		} else {
+			logInfo.Println("free regex builded")
+		}
 	}
 }
 
