@@ -3,10 +3,12 @@ package database
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
+	"os"
 	"time"
 
+	"github.com/NODO-UH/quota-scraper/src/configuration"
+
+	slog "github.com/NODO-UH/quota-scraper/src/log"
 	"github.com/NODO-UH/quota-scraper/src/squid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -14,11 +16,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-var logErr *log.Logger
-var logInfo *log.Logger
 var dbStatus *mongo.Collection
 var historyCollection *mongo.Collection
 var currentMonthCollection *mongo.Collection
+var freeCollection *mongo.Collection
+var config configuration.ScraperConfig
 var qlChan chan *Quotalog
 var UpOk chan bool
 
@@ -43,6 +45,10 @@ type DBProperty struct {
 	Value     interface{}
 }
 
+type FreeItem struct {
+	Regex *string
+}
+
 func (ql Quotalog) String() string {
 	return fmt.Sprintf("DT: %f, User: %s, Size: %d, Url: %s, From: %s", ql.DateTime, ql.User, ql.Size, ql.Url, ql.From)
 }
@@ -51,34 +57,42 @@ func init() {
 	UpOk = make(chan bool, 1)
 }
 
-func SetLogOutput(w io.Writer) {
-	logErr = log.New(w, "ERROR [database]: ", log.LstdFlags|log.Lmsgprefix)
-	logInfo = log.New(w, "INFO [database]: ", log.LstdFlags|log.Lmsgprefix)
+func logInfo(message string) {
+	slog.Info(message, "[database]")
+}
+
+func logError(message string) {
+	slog.Err(message, "[database]")
+}
+
+func logFatal(message string) {
+	logError(message)
+	os.Exit(1)
 }
 
 func AddHistory(ql *Quotalog) error {
 	if _, err := historyCollection.InsertOne(context.TODO(), ql); err != nil {
-		logErr.Println(err)
+		logError(err.Error())
 		return err
 	}
 	return nil
 }
 
-func UpdateLastDateTime(lastDateTime float64, scraperId string) error {
+func UpdateLastDateTime(lastDateTime float64) error {
 	if _, err := dbStatus.UpdateOne(
 		context.Background(),
-		bson.M{"prop": "lastDateTime", "scraperid": scraperId},
+		bson.M{"prop": "lastDateTime", "scraperid": *config.Id},
 		bson.D{
 			{"$set", bson.D{{"value", lastDateTime}}},
 		},
 	); err != nil {
-		logErr.Println(err)
+		logError(err.Error())
 		return err
 	}
 	return nil
 }
 
-func UpdateCurrentMonth(ql *Quotalog, scraperId string) error {
+func UpdateCurrentMonth(ql *Quotalog) error {
 	result := currentMonthCollection.FindOneAndUpdate(
 		context.Background(),
 		bson.M{"user": ql.User},
@@ -89,40 +103,39 @@ func UpdateCurrentMonth(ql *Quotalog, scraperId string) error {
 	if err == nil {
 		userMonth := QuotaMonth{}
 		if err := result.Decode(&userMonth); err != nil {
-			logErr.Println(err)
+			logError(err.Error())
 			return err
 		} else {
-
 			// Check for cut
 			if userMonth.Enabled && userMonth.Consumed+ql.Size > userMonth.Max {
-				logInfo.Printf("CUT %s", userMonth.User)
+				logInfo(fmt.Sprintf("CUT %s", userMonth.User))
 
 				// Cut in squid file
-				squid.Cut(ql.User)
-
-				// Set Enabled to false
-				currentMonthCollection.FindOneAndUpdate(
-					context.Background(),
-					bson.M{"user": ql.User},
-					bson.D{
-						{"$set", bson.D{{"enabled", false}}},
-						{"$set", bson.D{{"cutter", scraperId}}},
-					})
+				if err := squid.Cut(ql.User); err == nil {
+					// Set Enabled to false
+					currentMonthCollection.FindOneAndUpdate(
+						context.Background(),
+						bson.M{"user": ql.User},
+						bson.D{
+							{"$set", bson.D{{"enabled", false}}},
+							{"$set", bson.D{{"cutter", config.Id}}},
+						})
+				}
 			}
 		}
 
 	} else if err == mongo.ErrNoDocuments {
 		// User not found in current_month
-		logErr.Printf("unkown user %s in current_month\n", ql.User)
+		logError(fmt.Sprintf("unkown user %s in current_month\n", ql.User))
 	} else {
 		// Unexpected error
-		logErr.Println(err)
+		logError(err.Error())
 		return err
 	}
 	return nil
 }
 
-func Handler(scraperId string) {
+func Handler() {
 	qlChan = make(chan *Quotalog, 1)
 	for {
 		// Wait for new QuotaLog
@@ -131,30 +144,30 @@ func Handler(scraperId string) {
 		// Send log to history
 		if err := AddHistory(ql); err == nil {
 			// Update LastDateTime
-			UpdateLastDateTime(ql.DateTime, scraperId)
+			UpdateLastDateTime(ql.DateTime)
 
 			// Update current month
-			UpdateCurrentMonth(ql, scraperId)
+			UpdateCurrentMonth(ql)
 		}
 	}
 }
 
-func GetLastDateTime(scraperId string) float64 {
+func GetLastDateTime() float64 {
 	lastDateTime := DBProperty{}
 	// Load db status
-	if err := dbStatus.FindOne(context.Background(), bson.M{"prop": "lastDateTime", "scraperid": scraperId}).Decode(&lastDateTime); err != nil {
+	if err := dbStatus.FindOne(context.Background(), bson.M{"prop": "lastDateTime", "scraperid": *config.Id}).Decode(&lastDateTime); err != nil {
 		if err == mongo.ErrNoDocuments {
 			lastDateTime = DBProperty{
-				ScraperId: scraperId,
+				ScraperId: *config.Id,
 				Prop:      "lastDateTime",
 				Value:     0,
 			}
 			// Create db status
 			if _, err := dbStatus.InsertOne(context.TODO(), lastDateTime); err != nil {
-				logErr.Println(err)
+				logError(err.Error())
 			}
 		} else {
-			logErr.Println(err)
+			logError(err.Error())
 		}
 		return 0
 	}
@@ -166,35 +179,47 @@ func GetLastDateTime(scraperId string) float64 {
 	}
 }
 
-func StartDatabase(uri string, scraperId string) {
+func StartDatabase() {
+	config = configuration.GetConfiguration()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(*config.DbUri))
 
 	if err != nil {
-		logErr.Fatal(err)
+		logFatal(err.Error())
 	}
 
 	defer func() {
 		if err = client.Disconnect(ctx); err != nil {
-			logErr.Fatal(err)
+			logFatal(err.Error())
 		}
 	}()
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
-		logErr.Fatal(err)
+		logFatal(err.Error())
 	}
 
 	dbStatus = client.Database("quota").Collection("status")
 	historyCollection = client.Database("quota").Collection("history")
 	currentMonthCollection = client.Database("quota").Collection("current_month")
+	freeCollection = client.Database("quota").Collection("free")
 
-	logInfo.Println("Successfully connected and pinged.")
+	logInfo("Successfully connected and pinged.")
 
 	UpOk <- true
 
-	Handler(scraperId)
+	Handler()
+}
+
+func GetAllFree() []FreeItem {
+	free := []FreeItem{}
+	if cur, err := freeCollection.Find(context.Background(), bson.D{}); err != nil {
+		logError(err.Error())
+	} else if err = cur.All(context.TODO(), &free); err != nil {
+		logError(err.Error())
+	}
+	return free
 }
 
 func AddQuotalog(ql *Quotalog) {

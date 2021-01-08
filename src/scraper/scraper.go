@@ -4,17 +4,27 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/NODO-UH/quota-scraper/src/database"
+	"github.com/NODO-UH/quota-scraper/src/free"
+	slog "github.com/NODO-UH/quota-scraper/src/log"
 	stats "github.com/NODO-UH/quota-scraper/src/prometheus"
 	"github.com/fsnotify/fsnotify"
 )
 
-var logErr *log.Logger
+var userRegex *regexp.Regexp
+
+func init() {
+	userRegex, _ = regexp.Compile(".*@.*")
+}
+
+func logError(message string) {
+	slog.Err(message, "[scraper]")
+}
 
 func parseQuotaLog(l string) *database.Quotalog {
 	_words := strings.Split(l, " ")
@@ -25,7 +35,6 @@ func parseQuotaLog(l string) *database.Quotalog {
 		}
 	}
 	if len(words) < 10 {
-		logErr.Println("unexpected squid line")
 		return nil
 	}
 
@@ -35,19 +44,25 @@ func parseQuotaLog(l string) *database.Quotalog {
 	}
 
 	sd := database.Quotalog{}
-	if date_time, err := strconv.ParseFloat(words[0], 64); err != nil {
-		logErr.Println(err)
+	date_time, err := strconv.ParseFloat(words[0], 64)
+	if err != nil {
+		logError(err.Error())
 		return nil
-	} else {
-		sd.DateTime = date_time
 	}
-	sd.User = words[7]
-	if size, err := strconv.ParseInt(words[4], 10, 64); err != nil {
-		logErr.Println(err)
+	sd.DateTime = date_time
+
+	if userRegex.Match([]byte(words[7])) {
+		sd.User = words[7]
+	} else {
 		return nil
-	} else {
-		sd.Size = size
 	}
+	size, err := strconv.ParseInt(words[4], 10, 64)
+	if err != nil {
+		logError(err.Error())
+		return nil
+	}
+	sd.Size = size
+
 	sd.Url = strings.TrimSpace(words[6])
 	sd.From = strings.TrimSpace(words[2])
 	return &sd
@@ -59,7 +74,7 @@ func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 		if err == io.EOF {
 			return nil, true
 		}
-		logErr.Println(err)
+		logError(err.Error())
 		return nil, false
 	}
 	return parseQuotaLog(string(line_str)), false
@@ -76,10 +91,6 @@ func readLines(r *bufio.Reader) (sds []*database.Quotalog) {
 	return
 }
 
-func SetLogOutput(w io.Writer) {
-	logErr = log.New(w, "ERROR [scraper]: ", log.LstdFlags|log.Lmsgprefix)
-}
-
 func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 	reader := bufio.NewReader(file)
 
@@ -87,7 +98,9 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 	for _, v := range readLines(reader) {
 		if v.DateTime > lastDateTime {
 			lastDateTime = v.DateTime
-			database.AddQuotalog(v)
+			if !free.IsFree(v.Url) {
+				database.AddQuotalog(v)
+			}
 		}
 	}
 
@@ -110,7 +123,9 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 				for _, v := range readLines(reader) {
 					if v.DateTime > lastDateTime {
 						lastDateTime = v.DateTime
-						database.AddQuotalog(v)
+						if !free.IsFree(v.Url) {
+							database.AddQuotalog(v)
+						}
 					}
 				}
 			default:
