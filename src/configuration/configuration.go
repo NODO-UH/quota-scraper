@@ -2,9 +2,8 @@ package configuration
 
 import (
 	"encoding/json"
+	log "github.com/NODO-UH/quota-scraper/src/log"
 	"os"
-
-	slog "github.com/NODO-UH/quota-scraper/src/log"
 )
 
 type ScraperConfig struct {
@@ -23,12 +22,12 @@ func LoadConfiguration(path string) error {
 	configuration = &ScraperConfig{}
 	configFile, err := os.Open(path)
 	if err != nil {
-		slog.Err(err.Error(), "[configuration]")
+		log.Error.Println(err)
 		return err
 	}
 	jsonDecoder := json.NewDecoder(configFile)
 	if err = jsonDecoder.Decode(configuration); err != nil {
-		slog.Err(err.Error(), "[configuration]")
+		log.Error.Println(err)
 		return err
 	}
 

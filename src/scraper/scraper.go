@@ -11,7 +11,7 @@ import (
 
 	"github.com/NODO-UH/quota-scraper/src/database"
 	"github.com/NODO-UH/quota-scraper/src/free"
-	slog "github.com/NODO-UH/quota-scraper/src/log"
+	log "github.com/NODO-UH/quota-scraper/src/log"
 	stats "github.com/NODO-UH/quota-scraper/src/prometheus"
 	"github.com/fsnotify/fsnotify"
 )
@@ -20,10 +20,6 @@ var userRegex *regexp.Regexp
 
 func init() {
 	userRegex, _ = regexp.Compile(".*@.*")
-}
-
-func logError(message string) {
-	slog.Err(message, "[scraper]")
 }
 
 func parseQuotaLog(l string) *database.Quotalog {
@@ -46,7 +42,7 @@ func parseQuotaLog(l string) *database.Quotalog {
 	sd := database.Quotalog{}
 	date_time, err := strconv.ParseFloat(words[0], 64)
 	if err != nil {
-		logError(err.Error())
+		log.Error.Println(err)
 		return nil
 	}
 	sd.DateTime = date_time
@@ -58,7 +54,7 @@ func parseQuotaLog(l string) *database.Quotalog {
 	}
 	size, err := strconv.ParseInt(words[4], 10, 64)
 	if err != nil {
-		logError(err.Error())
+		log.Error.Println(err)
 		return nil
 	}
 	sd.Size = size
@@ -74,7 +70,7 @@ func parseLine(r *bufio.Reader) (*database.Quotalog, bool) {
 		if err == io.EOF {
 			return nil, true
 		}
-		logError(err.Error())
+		log.Error.Println(err)
 		return nil, false
 	}
 	return parseQuotaLog(string(line_str)), false
