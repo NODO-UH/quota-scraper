@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/NODO-UH/quota-scraper/src/configuration"
+	"github.com/NODO-UH/quota-scraper/src/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -24,7 +25,11 @@ func Start() {
 		Help: "The total number of processed valid log lines",
 	})
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":2112", nil)
+	go func() {
+		if err := http.ListenAndServe(":2112", nil); err != nil {
+			log.Error.Println(err)
+		}
+	}()
 }
 
 func LogCountInc() {
