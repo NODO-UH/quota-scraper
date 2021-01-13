@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/NODO-UH/quota-scraper/src/configuration"
+
 	"github.com/NODO-UH/quota-scraper/src/database"
 	"github.com/NODO-UH/quota-scraper/src/free"
 	log "github.com/NODO-UH/quota-scraper/src/log"
@@ -35,7 +37,7 @@ func parseQuotaLog(l string) *database.Quotalog {
 	}
 
 	// Check TCP_STATUS
-	if words[3] == "TCP_DENIED/407" {
+	if discardStatus(words[3]) {
 		return nil
 	}
 
@@ -131,4 +133,14 @@ func ParseFile(file *os.File, lastDateTime float64) (error, float64) {
 			return err, lastDateTime
 		}
 	}
+}
+
+func discardStatus(status string) bool {
+	c := configuration.GetConfiguration()
+	for _, i := range c.FreeTCPStatus {
+		if status == i {
+			return true
+		}
+	}
+	return false
 }
