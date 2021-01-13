@@ -2,17 +2,19 @@ package configuration
 
 import (
 	"encoding/json"
-	log "github.com/NODO-UH/quota-scraper/src/log"
 	"os"
+
+	log "github.com/NODO-UH/quota-scraper/src/log"
 )
 
 type ScraperConfig struct {
-	Id        *string
-	SquidFile *string
-	DbUri     *string
-	Cores     *int
-	MasterCut *string
-	Group     *string
+	Id            *string
+	SquidFile     *string
+	DbUri         *string
+	Cores         *int
+	MasterCut     *string
+	Group         *string
+	FreeTCPStatus []string `json:"freeTcpStatus"`
 }
 
 var configuration *ScraperConfig
