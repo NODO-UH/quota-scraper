@@ -2,8 +2,10 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/NODO-UH/quota-scraper/src/configuration"
@@ -14,6 +16,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	ldap "gopkg.in/ldap.v2"
 )
 
 var dbStatus *mongo.Collection
@@ -126,7 +129,50 @@ func UpdateCurrentMonth(ql *Quotalog) error {
 
 	} else if err == mongo.ErrNoDocuments {
 		// User not found in current_month
-		logError(fmt.Sprintf("unkown user %s in current_month\n", ql.User))
+
+		// Get quota from LDAP
+		l, err := ldap.Dial("tcp", *configuration.GetConfiguration().LdapAddr)
+		if err != nil {
+			slog.Err(err.Error(), "[ldap]")
+			return err
+		}
+
+		defer l.Close()
+
+		sr, err := l.Search(ldap.NewSearchRequest(
+			"dc=uh,dc=cu",
+			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+			fmt.Sprintf("(&(uid=%s))", ql.User),
+			[]string{"uid", "CuotaInternet"},
+			nil,
+		))
+		if err != nil {
+			slog.Err(err.Error(), "[ldap]")
+			return err
+		}
+
+		if len(sr.Entries) != 1 {
+			err := errors.New(fmt.Sprintf("unknown user %s", ql.User))
+			slog.Err(err.Error(), "[ldap]")
+			return err
+		}
+
+		quota, err := strconv.Atoi(sr.Entries[0].GetAttributeValue("CuotaInternet"))
+		if err != nil {
+			slog.Err(err.Error(), "[ldap]")
+			return err
+		}
+
+		_, err = currentMonthCollection.InsertOne(context.Background(), &QuotaMonth{
+			User:     ql.User,
+			Max:      int64(quota),
+			Consumed: ql.Size,
+			Enabled:  true,
+		})
+		if err != nil {
+			slog.Err(err.Error(), "[database]")
+			return err
+		}
 	} else {
 		// Unexpected error
 		logError(err.Error())
