@@ -1,4 +1,5 @@
 .vscode
+.idea
 quota-scraper_x32.bin
 quota-scraper_x64.bin
 vendor
